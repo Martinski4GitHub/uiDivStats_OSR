@@ -1,8 +1,5 @@
 # uiDivStats - WebUI for Diversion statistics
 
-## v4.0.9
-### Updated on 2025-Feb-11 by @decoderman with updates from @Martinski4GitHub
-
 ## About
 A graphical representation of domain blocking performed by Diversion.
 
@@ -22,7 +19,7 @@ amtm
 Using your preferred SSH client/terminal, copy and paste the following command, then press Enter:
 
 ```sh
-/usr/sbin/curl --retry 3 "https://raw.githubusercontent.com/decoderman/uiDivStats/master/uiDivStats.sh" -o "/jffs/scripts/uiDivStats" && chmod 0755 /jffs/scripts/uiDivStats && /jffs/scripts/uiDivStats install
+/usr/sbin/curl --retry 3 "https://raw.githubusercontent.com/AMTM-OSR/uiDivStats/master/uiDivStats.sh" -o "/jffs/scripts/uiDivStats" && chmod 0755 /jffs/scripts/uiDivStats && /jffs/scripts/uiDivStats install
 ```
 
 ## Usage
