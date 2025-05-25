@@ -9,10 +9,11 @@
 ##   | |_| || || |__| || | \ V /  ____) || |_| (_| || |_ \__ \   ##
 ##    \__,_||_||_____/ |_|  \_/  |_____/  \__|\__,_| \__||___/   ##
 ##                                                               ##
-##             https://github.com/jackyaz/uiDivStats             ##
+##            https://github.com/AMTM-OSR/uiDivStats             ##
+##      Forked from: https://github.com/jackyaz/uiDivStats       ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2025-Feb-11
+# Last Modified: 2025-May-25
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -34,7 +35,7 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.9"
+readonly SCRIPT_VERSION="v4.0.10"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/AMTM-OSR/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -2652,7 +2653,8 @@ ScriptHeader()
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##                     %s on %-18s              ##${CLEARFORMAT}\n" "$SCRIPT_VERSION" "$ROUTER_MODEL"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
-	printf "${BOLD}##              https://github.com/jackyaz/uiDivStats            ##${CLEARFORMAT}\\n"
+	printf "${BOLD}##            https://github.com/AMTM-OSR/uiDivStats             ##${CLEARFORMAT}\\n"
+	printf "${BOLD}##      Forked from: https://github.com/jackyaz/uiDivStats       ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
 	printf "${BOLD}###################################################################${CLEARFORMAT}\\n"
 	printf "\\n"
