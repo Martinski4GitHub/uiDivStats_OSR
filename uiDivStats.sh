@@ -810,7 +810,7 @@ Download_File()
 { /usr/sbin/curl -LSs --retry 4 --retry-delay 5 --retry-connrefused "$1" -o "$2" ; }
 
 ##-------------------------------------##
-## Added by Martinski W. [2025-Feb-11] ##
+## Added by Martinski W. [2025-Feb-18] ##
 ##-------------------------------------##
 _Check_WebGUI_Page_Exists_()
 {
@@ -820,7 +820,7 @@ _Check_WebGUI_Page_Exists_()
    then echo "NONE" ; return 1 ; fi
 
    theWebPage="NONE"
-   webPageStr="$(grep -E -m1 "$webPageLineRegExp" "$TEMP_MENU_TREE")"
+   webPageStr="$(grep -E -m1 "^$webPageLineRegExp" "$TEMP_MENU_TREE")"
    if [ -n "$webPageStr" ]
    then
        webPageFile="$(echo "$webPageStr" | grep -owE "$webPageFileRegExp" | head -n1)"
@@ -858,11 +858,11 @@ Get_WebUI_Page()
 
 ### function based on @dave14305's FlexQoS webconfigpage function ###
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Feb-11] ##
+## Modified by Martinski W. [2025-Mar-02] ##
 ##----------------------------------------##
 Get_WebUI_URL()
 {
-	local urlPage=""  urlProto=""  urlDomain=""  urlPort=""
+	local urlPage  urlProto  urlDomain  urlPort  lanPort
 
 	if [ ! -f "$TEMP_MENU_TREE" ]
 	then
@@ -882,12 +882,13 @@ Get_WebUI_URL()
 	else
 		urlDomain="$(nvram get lan_ipaddr)"
 	fi
-	if [ "$(nvram get ${urlProto}_lanport)" -eq 80 ] || \
-	   [ "$(nvram get ${urlProto}_lanport)" -eq 443 ]
+
+	lanPort="$(nvram get ${urlProto}_lanport)"
+	if [ "$lanPort" -eq 80 ] || [ "$lanPort" -eq 443 ]
 	then
 		urlPort=""
 	else
-		urlPort=":$(nvram get ${urlProto}_lanport)"
+		urlPort=":$lanPort"
 	fi
 
 	if echo "$urlPage" | grep -qE "^${webPageFileRegExp}$" && \
@@ -2230,7 +2231,7 @@ _ShowDatabaseFileInfo_()
 _GetTrimLogTimeStamp_() { printf "[$(date +"$trimLogDateForm")]" ; }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Jan-28] ##
+## Modified by Martinski W. [2025-Mar-09] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmds_()
 {
@@ -2271,7 +2272,6 @@ _ApplyDatabaseSQLCmds_()
         sleep 1
     done
 
-    rm -f "$tempLogFilePath"
     if "$foundError"
     then resultStr="reported error(s)."
     elif "$foundLocked"
@@ -2282,10 +2282,11 @@ _ApplyDatabaseSQLCmds_()
     then
         Print_Output true "SQLite process ${resultStr}" "$ERR"
     fi
+    rm -f "$tempLogFilePath"
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Jan-28] ##
+## Modified by Martinski W. [2025-Mar-09] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmdsForTrim_()
 {
@@ -2331,7 +2332,6 @@ _ApplyDatabaseSQLCmdsForTrim_()
     done
 
     [ -s "$tempLogFilePath" ] && cat "$tempLogFilePath" >> "$trimLOGFilePath"
-    rm -f "$tempLogFilePath"
     if "$foundError"
     then resultStr="reported error(s)."
     elif "$foundLocked"
@@ -2341,6 +2341,7 @@ _ApplyDatabaseSQLCmdsForTrim_()
         [ "$triesCount" -gt 1 ] && \
         printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$trimLOGFilePath"
     fi
+    rm -f "$tempLogFilePath"
 }
 
 ##----------------------------------------##
@@ -2651,7 +2652,7 @@ ScriptHeader()
 	printf "${BOLD}##   | |_| || || |__| || | \ V /  ____) || |_| (_| || |_ \__ \   ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##    \__,_||_||_____/ |_|  \_/  |_____/  \__|\__,_| \__||___/   ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
-	printf "${BOLD}##                     %s on %-18s              ##${CLEARFORMAT}\n" "$SCRIPT_VERSION" "$ROUTER_MODEL"
+	printf "${BOLD}##                   %9s on %-18s             ##${CLEARFORMAT}\n" "$SCRIPT_VERSION" "$ROUTER_MODEL"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##            https://github.com/AMTM-OSR/uiDivStats             ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##      Forked from: https://github.com/jackyaz/uiDivStats       ##${CLEARFORMAT}\\n"
@@ -3336,11 +3337,14 @@ Show_About()
 About
   $SCRIPT_NAME provides a graphical representation of domain
   blocking performed by Diversion.
+
 License
   $SCRIPT_NAME is free to use under the GNU General Public License
   version 3 (GPL-3.0) https://opensource.org/licenses/GPL-3.0
+
 Help & Support
   https://www.snbforums.com/forums/asuswrt-merlin-addons.60/?prefix_id=15
+
 Source code
   https://github.com/AMTM-OSR/$SCRIPT_NAME
 EOF
