@@ -10,10 +10,10 @@
 ##    \__,_||_||_____/ |_|  \_/  |_____/  \__|\__,_| \__||___/   ##
 ##                                                               ##
 ##            https://github.com/AMTM-OSR/uiDivStats             ##
-##      Forked from: https://github.com/jackyaz/uiDivStats       ##
+##       Forked from https://github.com/jackyaz/uiDivStats       ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2025-May-25
+# Last Modified: 2025-Jun-04
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -35,8 +35,9 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.10"
-SCRIPT_BRANCH="master"
+readonly SCRIPT_VERSION="v4.0.11"
+readonly SCRIPT_VERSTAG="25060412"
+SCRIPT_BRANCH="develop"
 SCRIPT_REPO="https://raw.githubusercontent.com/AMTM-OSR/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
 readonly SCRIPT_CONF="$SCRIPT_DIR/config"
@@ -64,15 +65,22 @@ readonly defGenrDB_Mins=10
 readonly trimLOGFileSize=65536
 readonly trimLOGFilePath="${SCRIPT_USB_DIR}/uiDivStats_Trim.LOG"
 readonly trimTMPOldsFile="${SCRIPT_USB_DIR}/uiDivStats_Olds.TMP"
-readonly trimLogDateForm="%Y-%m-%d %H:%M:%S"
 readonly scriptVersRegExp="v[0-9]{1,2}([.][0-9]{1,2})([.][0-9]{1,2})"
 readonly webPageFileRegExp="user([1-9]|[1-2][0-9])[.]asp"
 readonly webPageLineRegExp="\{url: \"$webPageFileRegExp\", tabName: \"$SCRIPT_NAME\"\}"
+readonly scriptVERINFO="[${SCRIPT_VERSION}_${SCRIPT_VERSTAG}, Branch: $SCRIPT_BRANCH]"
 
 readonly oneKByte=1024
 readonly oneMByte=1048576
 readonly oneGByte=1073741824
 readonly SHARE_TEMP_DIR="/opt/share/tmp"
+
+##-------------------------------------##
+## Added by Martinski W. [2025-Jun-04] ##
+##-------------------------------------##
+readonly sqlDBLogFileSize=102400
+readonly sqlDBLogDateTime="%Y-%m-%d %H:%M:%S"
+readonly sqlDBLogFileName="${SCRIPT_NAME}_DBSQL_DEBUG.LOG"
 
 ### End of script variables ###
 
@@ -2228,16 +2236,31 @@ _ShowDatabaseFileInfo_()
    printf "[%sB] %s\n" "$fileSize" "$sizeInfo"
 }
 
-_GetTrimLogTimeStamp_() { printf "[$(date +"$trimLogDateForm")]" ; }
+##-------------------------------------##
+## Added by Martinski W. [2025-Jun-04] ##
+##-------------------------------------##
+_SQLCheckDBLogFileSize_()
+{
+   if [ "$(_GetFileSize_ "$sqlDBLogFilePath")" -gt "$sqlDBLogFileSize" ]
+   then
+       cp -fp "$sqlDBLogFilePath" "${sqlDBLogFilePath}.BAK"
+       echo -n > "$sqlDBLogFilePath"
+   fi
+}
+
+_SQLGetDBLogTimeStamp_()
+{ printf "[$(date +"$sqlDBLogDateTime")]" ; }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Mar-09] ##
+## Modified by Martinski W. [2025-Jun-04] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmds_()
 {
     local errorCount=0  maxErrorCount=5  callFlag
-    local triesCount=0  maxTriesCount=25  sqlErrorMsg
-    local tempLogFilePath="/tmp/uiDivStats_TMP_$$.LOG"
+    local triesCount=0  maxTriesCount=10  sqlErrorMsg
+    local tempLogFilePath="/tmp/${SCRIPT_NAME}_TMP_$$.LOG"
+    local debgLogFilePath="/tmp/${SCRIPT_NAME}_DEBUG_$$.LOG"
+    local debgLogSQLcmds=false
 
     if [ $# -gt 1 ] && [ -n "$2" ]
     then callFlag="$2"
@@ -2246,7 +2269,7 @@ _ApplyDatabaseSQLCmds_()
 
     resultStr=""
     foundError=false ; foundLocked=false
-    rm -f "$tempLogFilePath"
+    rm -f "$tempLogFilePath" "$debgLogFilePath"
 
     while [ "$errorCount" -lt "$maxErrorCount" ] && \
           [ "$((triesCount++))" -lt "$maxTriesCount" ]
@@ -2255,23 +2278,48 @@ _ApplyDatabaseSQLCmds_()
         then foundError=false ; foundLocked=false ; break
         fi
         sqlErrorMsg="$(cat "$tempLogFilePath")"
+
         if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:)"
         then
             if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
             then
+                foundLocked=true ; maxTriesCount=25
                 echo -n > "$tempLogFilePath"  ##Clear for next error found##
-                foundLocked=true ; sleep 2 ; continue
+                sleep 2 ; continue
             fi
             errorCount="$((errorCount + 1))"
             foundError=true ; foundLocked=false
             Print_Output true "SQLite3 failure[$callFlag]: $sqlErrorMsg" "$ERR"
-            echo -n > "$tempLogFilePath"  ##Clear for next error found##
         fi
+
+        if ! "$debgLogSQLcmds"
+        then
+           debgLogSQLcmds=true
+           {
+              echo "==========================================="
+              echo "$(_SQLGetDBLogTimeStamp_) BEGIN [$callFlag]"
+              echo "Database: $DNS_DB"
+           } > "$debgLogFilePath"
+        fi
+        cat "$tempLogFilePath" >> "$debgLogFilePath"
+        echo -n > "$tempLogFilePath"  ##Clear for next error found##
         [ "$triesCount" -ge "$maxTriesCount" ] && break
         [ "$errorCount" -ge "$maxErrorCount" ] && break
         sleep 1
     done
 
+    if "$debgLogSQLcmds"
+    then
+       {
+          echo "--------------------------------"
+          cat "$1"
+          echo "--------------------------------"
+          echo "$(_SQLGetDBLogTimeStamp_) END [$callFlag]"
+       } >> "$debgLogFilePath"
+       cat "$debgLogFilePath" >> "$sqlDBLogFilePath"
+    fi
+
+    rm -f "$tempLogFilePath" "$debgLogFilePath"
     if "$foundError"
     then resultStr="reported error(s)."
     elif "$foundLocked"
@@ -2282,17 +2330,16 @@ _ApplyDatabaseSQLCmds_()
     then
         Print_Output true "SQLite process ${resultStr}" "$ERR"
     fi
-    rm -f "$tempLogFilePath"
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Mar-09] ##
+## Modified by Martinski W. [2025-Jun-04] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmdsForTrim_()
 {
     local errorCount=0  maxErrorCount=5  callFlag
-    local triesCount=0  maxTriesCount=25  sqlErrorMsg
-    local tempLogFilePath="/tmp/uiDivStats_TMP_$$.LOG"
+    local triesCount=0  maxTriesCount=10  sqlErrorMsg
+    local tempLogFilePath="/tmp/${SCRIPT_NAME}_TMP_$$.LOG"
 
     if [ $# -gt 1 ] && [ -n "$2" ]
     then callFlag="$2"
@@ -2310,15 +2357,17 @@ _ApplyDatabaseSQLCmdsForTrim_()
         then foundError=false ; foundLocked=false ; break
         fi
         sqlErrorMsg="$(cat "$tempLogFilePath")"
+
         echo "-----------------------------------" >> "$tempLogFilePath"
-        printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$tempLogFilePath"
+        printf "$(_SQLGetDBLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$tempLogFilePath"
         if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:)"
         then
             if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
             then
+                foundLocked=true ; maxTriesCount=25
                 cat "$tempLogFilePath" >> "$trimLOGFilePath"
                 echo -n > "$tempLogFilePath"  ##Clear for next error found##
-                foundLocked=true ; sleep 2 ; continue
+                sleep 2 ; continue
             fi
             errorCount="$((errorCount + 1))"
             foundError=true ; foundLocked=false
@@ -2339,7 +2388,7 @@ _ApplyDatabaseSQLCmdsForTrim_()
     else
         resultStr="completed successfully."
         [ "$triesCount" -gt 1 ] && \
-        printf "$(_GetTrimLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$trimLOGFilePath"
+        printf "$(_SQLGetDBLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$trimLOGFilePath"
     fi
     rm -f "$tempLogFilePath"
 }
@@ -2353,7 +2402,7 @@ _Optimize_Database_()
 
 	local foundError  foundLocked  resultStr
 
-	printf "$(_GetTrimLogTimeStamp_) BEGIN [${SCRIPT_VERSION}]\n" | tee -a "$trimLOGFilePath"
+	printf "$(_SQLGetDBLogTimeStamp_) BEGIN [${SCRIPT_VERSION}]\n" | tee -a "$trimLOGFilePath"
 	printf "Running database analysis and optimization...\n" | tee -a "$trimLOGFilePath"
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 
@@ -2370,7 +2419,7 @@ _Optimize_Database_()
 	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql opt1
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 	printf "Database analysis and optimization process ${resultStr}\n" | tee -a "$trimLOGFilePath"
-	printf "$(_GetTrimLogTimeStamp_) END.\n" | tee -a "$trimLOGFilePath"
+	printf "$(_SQLGetDBLogTimeStamp_) END.\n" | tee -a "$trimLOGFilePath"
 	echo "========================================" >> "$trimLOGFilePath"
 
 	rm -f /tmp/uidivstats-trim.sql
@@ -2402,7 +2451,7 @@ _Trim_Database_()
 	trimNumLocked=0
 	trimErrorsFound=false
 
-	printf "$(_GetTrimLogTimeStamp_) BEGIN [${SCRIPT_VERSION}]\n" | tee -a "$trimLOGFilePath"
+	printf "$(_SQLGetDBLogTimeStamp_) BEGIN [${SCRIPT_VERSION}]\n" | tee -a "$trimLOGFilePath"
 	printf "Trimming database records older than [$(DaysToKeep check)] days...\n" | tee -a "$trimLOGFilePath"
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 
@@ -2421,19 +2470,19 @@ _Trim_Database_()
 	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql trm1
 	"$foundError" && trimErrorsFound=true
 	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
-	printf "$(_GetTrimLogTimeStamp_) Database record trimming process ${resultStr}\n" | tee -a "$trimLOGFilePath"
+	printf "$(_SQLGetDBLogTimeStamp_) Database record trimming process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 
 	Write_View_Sql_ToFile drop dnsqueries weekly /tmp/uidivstats-trim.sql
 	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql trm2
 	"$foundError" && trimErrorsFound=true
 	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
-	printf "$(_GetTrimLogTimeStamp_) Database weekly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
+	printf "$(_SQLGetDBLogTimeStamp_) Database weekly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 
 	Write_View_Sql_ToFile drop dnsqueries monthly /tmp/uidivstats-trim.sql
 	_ApplyDatabaseSQLCmdsForTrim_ /tmp/uidivstats-trim.sql trm3
 	"$foundError" && trimErrorsFound=true
 	"$foundLocked" && trimNumLocked="$((trimNumLocked + 1))"
-	printf "$(_GetTrimLogTimeStamp_) Database monthly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
+	printf "$(_SQLGetDBLogTimeStamp_) Database monthly view removal process ${resultStr}\n" | tee -a "$trimLOGFilePath"
 
 	rm -f /tmp/uidivstats-trim.sql
 	Print_Output true "Database record trimming completed." "$PASS"
@@ -2446,7 +2495,7 @@ _Trim_Database_()
 	fi
 	_ShowDatabaseFileInfo_ "$DNS_DB" | tee -a "$trimLOGFilePath"
 	printf "Database trimming process ${resultStr}\n" | tee -a "$trimLOGFilePath"
-	printf "$(_GetTrimLogTimeStamp_) END.\n\n" | tee -a "$trimLOGFilePath"
+	printf "$(_SQLGetDBLogTimeStamp_) END.\n\n" | tee -a "$trimLOGFilePath"
 
 	renice 0 $$
 	Clear_Lock
@@ -2655,7 +2704,7 @@ ScriptHeader()
 	printf "${BOLD}##                   %9s on %-18s             ##${CLEARFORMAT}\n" "$SCRIPT_VERSION" "$ROUTER_MODEL"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##            https://github.com/AMTM-OSR/uiDivStats             ##${CLEARFORMAT}\\n"
-	printf "${BOLD}##      Forked from: https://github.com/jackyaz/uiDivStats       ##${CLEARFORMAT}\\n"
+	printf "${BOLD}##       Forked from https://github.com/jackyaz/uiDivStats       ##${CLEARFORMAT}\\n"
 	printf "${BOLD}##                                                               ##${CLEARFORMAT}\\n"
 	printf "${BOLD}###################################################################${CLEARFORMAT}\\n"
 	printf "\\n"
@@ -3331,10 +3380,13 @@ Entware_Ready()
 	return 0
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2025-Jun-04] ##
+##----------------------------------------##
 Show_About()
 {
 	cat <<EOF
-About
+About $SCRIPT_VERS_INFO
   $SCRIPT_NAME provides a graphical representation of domain
   blocking performed by Diversion.
 
@@ -3352,9 +3404,13 @@ EOF
 }
 
 ### function based on @dave14305's FlexQoS show_help function ###
+##----------------------------------------##
+## Modified by Martinski W. [2025-Jun-04] ##
+##----------------------------------------##
 Show_Help()
 {
 	cat <<EOF
+HELP $SCRIPT_VERS_INFO
 Available commands:
   $SCRIPT_NAME about            explains functionality
   $SCRIPT_NAME update           checks for updates
@@ -3381,6 +3437,17 @@ EOF
 TMPDIR="$SHARE_TEMP_DIR"
 SQLITE_TMPDIR="$TMPDIR"
 export SQLITE_TMPDIR TMPDIR
+
+if [ -d "$TMPDIR" ]
+then sqlDBLogFilePath="${TMPDIR}/$sqlDBLogFileName"
+else sqlDBLogFilePath="/tmp/var/tmp/$sqlDBLogFileName"
+fi
+_SQLCheckDBLogFileSize_
+
+if [ "$SCRIPT_BRANCH" != "develop" ]
+then SCRIPT_VERS_INFO=""
+else SCRIPT_VERS_INFO="$scriptVERINFO"
+fi
 
 dbBackgProcsEnabled="$(_ToggleBackgroundProcsEnabled_ check)"
 
