@@ -13,7 +13,7 @@
 ##       Forked from https://github.com/jackyaz/uiDivStats       ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2025-Jun-04
+# Last Modified: 2025-Jun-06
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -36,7 +36,7 @@
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
 readonly SCRIPT_VERSION="v4.0.11"
-readonly SCRIPT_VERSTAG="25060412"
+readonly SCRIPT_VERSTAG="25060622"
 SCRIPT_BRANCH="develop"
 SCRIPT_REPO="https://raw.githubusercontent.com/AMTM-OSR/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -549,6 +549,35 @@ Create_Symlinks()
 	fi
 }
 
+##-------------------------------------##
+## Added by Martinski W. [2025-Jun-06] ##
+##-------------------------------------##
+_GetConfigParam_()
+{
+   if [ $# -eq 0 ] || [ -z "$1" ]
+   then echo '' ; return 1 ; fi
+
+   local keyValue  checkFile
+   local defValue="$([ $# -eq 2 ] && echo "$2" || echo '')"
+
+   if [ ! -s "$SCRIPT_CONF" ]
+   then echo "$defValue" ; return 0 ; fi
+
+   if [ "$(grep -c "^${1}=" "$SCRIPT_CONF")" -gt 1 ]
+   then  ## Remove duplicates. Keep ONLY the 1st key ##
+       checkFile="${SCRIPT_CONF}.DUPKEY.txt"
+       awk "!(/^${1}=/ && dup[/^${1}=/]++)" "$SCRIPT_CONF" > "$checkFile"
+       if diff -q "$checkFile" "$SCRIPT_CONF" >/dev/null 2>&1
+       then rm -f "$checkFile"
+       else mv -f "$checkFile" "$SCRIPT_CONF"
+       fi
+   fi
+
+   keyValue="$(grep "^${1}=" "$SCRIPT_CONF" | cut -d'=' -f2)"
+   echo "${keyValue:=$defValue}"
+   return 0
+}
+
 ##----------------------------------------##
 ## Modified by Martinski W. [2024-Dec-21] ##
 ##----------------------------------------##
@@ -968,8 +997,8 @@ _ToggleBackgroundProcsEnabled_()
 
     if [ "$paramStr" = "check" ]
     then
-        dbBackgProcsEnabled="$(grep "^BACKG_STATS_PROCS_ENABLED=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-        echo "${dbBackgProcsEnabled:=true}"
+        dbBackgProcsEnabled="$(_GetConfigParam_ BACKG_STATS_PROCS_ENABLED 'true')"
+        echo "$dbBackgProcsEnabled"
         return 0
     fi
     dbBackgProcsEnabled="$(_ToggleBackgroundProcsEnabled_ check)"
@@ -1023,7 +1052,7 @@ _ToggleBackgroundProcsEnabled_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-21] ##
+## Modified by Martinski W. [2025-Jun-06] ##
 ##----------------------------------------##
 QueryMode()
 {
@@ -1051,14 +1080,14 @@ QueryMode()
 			fi
 		;;
 		check)
-			QUERYMODE="$(grep "^QUERYMODE=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-			echo "${QUERYMODE:=all}"
+			QUERYMODE="$(_GetConfigParam_ QUERYMODE all)"
+			echo "$QUERYMODE"
 		;;
 	esac
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-21] ##
+## Modified by Martinski W. [2025-Jun-06] ##
 ##----------------------------------------##
 CacheMode()
 {
@@ -1087,14 +1116,14 @@ CacheMode()
 			fi
 		;;
 		check)
-			CACHEMODE="$(grep "^CACHEMODE=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-			echo "${CACHEMODE:=none}"
+			CACHEMODE="$(_GetConfigParam_ CACHEMODE none)"
+			echo "$CACHEMODE"
 		;;
 	esac
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Feb-08] ##
+## Modified by Martinski W. [2025-Jun-06] ##
 ##----------------------------------------##
 DaysToKeep()
 {
@@ -1143,14 +1172,14 @@ DaysToKeep()
 			fi
 		;;
 		check)
-			DAYSTOKEEP="$(grep "^DAYSTOKEEP=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-			echo "${DAYSTOKEEP:=30}"
+			DAYSTOKEEP="$(_GetConfigParam_ DAYSTOKEEP 30)"
+			echo "$DAYSTOKEEP"
 		;;
 	esac
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Feb-08] ##
+## Modified by Martinski W. [2025-Jun-06] ##
 ##----------------------------------------##
 LastXQueries()
 {
@@ -1200,8 +1229,8 @@ LastXQueries()
 			fi
 		;;
 		check)
-			LASTXQUERIES="$(grep "^LASTXQUERIES=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-			echo "${LASTXQUERIES:=5000}"
+			LASTXQUERIES="$(_GetConfigParam_ LASTXQUERIES 5000)"
+			echo "$LASTXQUERIES"
 		;;
 	esac
 }
@@ -1476,7 +1505,7 @@ _ValidateCronJobMins_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-21] ##
+## Modified by Martinski W. [2025-Jun-06] ##
 ##----------------------------------------##
 #----------------------------------------------------------
 # NOTE: The cron job MINUTES should *NOT* be modified
@@ -1531,8 +1560,8 @@ _TrimDatabaseTime_()
            fi
            ;;
        hour)
-           TRIMDB_HOUR="$(grep "^TRIMDB_HOUR=" "$SCRIPT_CONF" | cut -f2 -d"=")"
-           echo "${TRIMDB_HOUR:=$defTrimDB_Hour}"
+           TRIMDB_HOUR="$(_GetConfigParam_ TRIMDB_HOUR "$defTrimDB_Hour")"
+           echo "$TRIMDB_HOUR"
            ;;
        timeHRx)
            trimDBhour="$(_TrimDatabaseTime_ hour)"
@@ -2252,11 +2281,11 @@ _SQLGetDBLogTimeStamp_()
 { printf "[$(date +"$sqlDBLogDateTime")]" ; }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Jun-04] ##
+## Modified by Martinski W. [2025-Jun-05] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmds_()
 {
-    local errorCount=0  maxErrorCount=5  callFlag
+    local errorCount=0  maxErrorCount=3  callFlag
     local triesCount=0  maxTriesCount=10  sqlErrorMsg
     local tempLogFilePath="/tmp/${SCRIPT_NAME}_TMP_$$.LOG"
     local debgLogFilePath="/tmp/${SCRIPT_NAME}_DEBUG_$$.LOG"
@@ -2279,7 +2308,7 @@ _ApplyDatabaseSQLCmds_()
         fi
         sqlErrorMsg="$(cat "$tempLogFilePath")"
 
-        if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:)"
+        if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:|Illegal instruction)"
         then
             if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
             then
@@ -2333,11 +2362,11 @@ _ApplyDatabaseSQLCmds_()
 }
 
 ##----------------------------------------##
-## Modified by Martinski W. [2025-Jun-04] ##
+## Modified by Martinski W. [2025-Jun-05] ##
 ##----------------------------------------##
 _ApplyDatabaseSQLCmdsForTrim_()
 {
-    local errorCount=0  maxErrorCount=5  callFlag
+    local errorCount=0  maxErrorCount=3  callFlag
     local triesCount=0  maxTriesCount=10  sqlErrorMsg
     local tempLogFilePath="/tmp/${SCRIPT_NAME}_TMP_$$.LOG"
 
@@ -2360,7 +2389,7 @@ _ApplyDatabaseSQLCmdsForTrim_()
 
         echo "-----------------------------------" >> "$tempLogFilePath"
         printf "$(_SQLGetDBLogTimeStamp_) TRY_COUNT=[$triesCount]\n" | tee -a "$tempLogFilePath"
-        if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:)"
+        if echo "$sqlErrorMsg" | grep -qE "^(Parse error|Runtime error|Error:|Illegal instruction)"
         then
             if echo "$sqlErrorMsg" | grep -qE "^(Parse|Runtime) error .*: database is locked"
             then
