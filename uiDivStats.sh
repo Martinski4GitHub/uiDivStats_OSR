@@ -13,7 +13,7 @@
 ##       Forked from https://github.com/jackyaz/uiDivStats       ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2026-Jan-19
+# Last Modified: 2026-Feb-18
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -35,8 +35,8 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.14"
-readonly SCRIPT_VERSTAG="26011900"
+readonly SCRIPT_VERSION="v4.0.15"
+readonly SCRIPT_VERSTAG="26021800"
 SCRIPT_BRANCH="master"
 SCRIPT_REPO="https://raw.githubusercontent.com/AMTM-OSR/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -71,6 +71,9 @@ readonly webPageLineRegExp="\{url: \"$webPageFileRegExp\", tabName: \"$SCRIPT_NA
 readonly branchxStr_TAG="[Branch: $SCRIPT_BRANCH]"
 readonly versionDev_TAG="${SCRIPT_VERSION}_${SCRIPT_VERSTAG}"
 readonly versionMod_TAG="$SCRIPT_VERSION on $ROUTER_MODEL"
+
+# To support automatic script updates from AMTM #
+doScriptUpdateFromAMTM=true
 
 readonly oneKByte=1024
 readonly oneMByte=1048576
@@ -297,9 +300,11 @@ Update_Version()
 		localver="$(echo "$updatecheckresult" | cut -f2 -d',')"
 		serverver="$(echo "$updatecheckresult" | cut -f3 -d',')"
 
-		if [ "$isupdate" = "version" ]; then
+		if [ "$isupdate" = "version" ]
+		then
 			Print_Output true "New version of $SCRIPT_NAME available - $serverver" "$PASS"
-		elif [ "$isupdate" = "md5" ]; then
+		elif [ "$isupdate" = "md5" ]
+		then
 			Print_Output true "MD5 hash of $SCRIPT_NAME does not match - hotfix available - $serverver" "$PASS"
 		fi
 
@@ -358,6 +363,23 @@ Update_Version()
 		fi
 		exit 0
 	fi
+}
+
+##-------------------------------------##
+## Added by Martinski W. [2026-Feb-18] ##
+##-------------------------------------##
+ScriptUpdateFromAMTM()
+{
+    if ! "$doScriptUpdateFromAMTM"
+    then
+        printf "Automatic script updates via AMTM are currently disabled.\n\n"
+        return 1
+    fi
+    if [ $# -gt 0 ] && [ "$1" = "check" ]
+    then return 0
+    fi
+    Update_Version force unattended
+    return "$?"
 }
 
 Update_File()
@@ -2954,7 +2976,8 @@ MainMenu()
 			;;
 			u)
 				printf "\n"
-				if Check_Lock menu; then
+				if Check_Lock menu
+				then
 					Update_Version
 					Clear_Lock
 				fi
@@ -2963,7 +2986,8 @@ MainMenu()
 			;;
 			uf)
 				printf "\n"
-				if Check_Lock menu; then
+				if Check_Lock menu
+				then
 					Update_Version force
 					Clear_Lock
 				fi
@@ -2985,7 +3009,8 @@ MainMenu()
 				exit 0
 			;;
 			z)
-				while true; do
+				while true
+				do
 					printf "\\n${BOLD}Are you sure you want to uninstall %s? (y/n)${CLEARFORMAT}  " "$SCRIPT_NAME"
 					read -r confirm
 					case "$confirm" in
@@ -3040,7 +3065,7 @@ Check_Requirements()
 		if ! /opt/bin/grep -q '^log-facility=/opt/var/log/dnsmasq.log' /etc/dnsmasq.conf
 		then
 			Print_Output false "Diversion logging not enabled!" "$ERR"
-			Print_Output false "Open Diversion and use option l to enable logging"
+			Print_Output false "Open Diversion and use option l to enable logging" "$WARN"
 			CHECKSFAILED="true"
 		fi
 	fi
@@ -3078,7 +3103,7 @@ Menu_Install()
 	if ! Check_Requirements
 	then
 		Print_Output false "Requirements for $SCRIPT_NAME not met, please see above for the reason(s)" "$CRIT"
-		PressEnter
+		PressEnter ; echo
 		Clear_Lock
 		rm -f "/jffs/scripts/$SCRIPT_NAME" 2>/dev/null
 		exit 1
@@ -3596,7 +3621,7 @@ then
 fi
 
 ##----------------------------------------##
-## Modified by Martinski W. [2024-Dec-21] ##
+## Modified by Martinski W. [2026-Feb-18] ##
 ##----------------------------------------##
 case "$1" in
 	install)
@@ -3698,6 +3723,11 @@ case "$1" in
 	forceupdate)
 		Update_Version force unattended
 		exit 0
+	;;
+	amtmupdate)
+		shift
+		ScriptUpdateFromAMTM "$@"
+		exit "$?"
 	;;
 	setversion)
 		Set_Version_Custom_Settings local "$SCRIPT_VERSION"
