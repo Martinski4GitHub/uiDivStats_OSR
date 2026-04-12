@@ -13,7 +13,7 @@
 ##       Forked from https://github.com/jackyaz/uiDivStats       ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2026-Feb-18
+# Last Modified: 2026-Apr-11
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -35,9 +35,9 @@
 
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
-readonly SCRIPT_VERSION="v4.0.15"
-readonly SCRIPT_VERSTAG="26021800"
-SCRIPT_BRANCH="master"
+readonly SCRIPT_VERSION="v4.0.16"
+readonly SCRIPT_VERSTAG="26041103"
+SCRIPT_BRANCH="develop"
 SCRIPT_REPO="https://raw.githubusercontent.com/AMTM-OSR/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
 readonly SCRIPT_CONF="$SCRIPT_DIR/config"
@@ -111,6 +111,9 @@ readonly PassBGRNct="\e[30;102m"
 readonly WarnBYLWct="\e[30;103m"
 
 ### End of output format variables ###
+
+# Workaround for Entware ELF binaries compiled with RUNPATH #
+unset LD_LIBRARY_PATH
 
 # Give priority to built-in binaries #
 export PATH="/bin:/usr/bin:/sbin:/usr/sbin:$PATH"
