@@ -13,7 +13,7 @@
 ##       Forked from https://github.com/jackyaz/uiDivStats       ##
 ##                                                               ##
 ###################################################################
-# Last Modified: 2026-Apr-15
+# Last Modified: 2026-Apr-24
 #------------------------------------------------------------------
 
 #################        Shellcheck directives      ###############
@@ -36,7 +36,7 @@
 ### Start of script variables ###
 readonly SCRIPT_NAME="uiDivStats"
 readonly SCRIPT_VERSION="v4.0.17"
-readonly SCRIPT_VERSTAG="26041500"
+readonly SCRIPT_VERSTAG="26042400"
 SCRIPT_BRANCH="develop"
 SCRIPT_REPO="https://raw.githubusercontent.com/AMTM-OSR/$SCRIPT_NAME/$SCRIPT_BRANCH"
 readonly SCRIPT_DIR="/jffs/addons/$SCRIPT_NAME.d"
@@ -90,13 +90,13 @@ readonly sqlDBLogFileName="${SCRIPT_NAME}_DBSQL_DEBUG.LOG"
 ### End of script variables ###
 
 ### Start of output format variables ###
-readonly CRIT="\\e[41m"
-readonly ERR="\\e[31m"
-readonly WARN="\\e[33m"
-readonly PASS="\\e[32m"
-readonly BOLD="\\e[1m"
-readonly SETTING="${BOLD}\\e[36m"
-readonly CLEARFORMAT="\\e[0m"
+readonly CRIT="\e[41m"
+readonly ERR="\e[31m"
+readonly WARN="\e[33m"
+readonly PASS="\e[32m"
+readonly BOLD="\e[1m"
+readonly SETTING="${BOLD}\e[36m"
+readonly CLEARFORMAT="\e[0m"
 
 ##----------------------------------------##
 ## Modified by Martinski W. [2025-Feb-08] ##
@@ -948,14 +948,16 @@ Get_WebUI_URL()
 		return 1
 	fi
 
-	urlPage="$(sed -nE "/$SCRIPT_NAME/ s/.*url\: \"(user[0-9]+\.asp)\".*/\1/p" "$TEMP_MENU_TREE")"
+	urlPage="$(_Check_WebGUI_Page_Exists_)"
 
-	if [ "$(nvram get http_enable)" -eq 1 ]; then
+	if [ "$(nvram get http_enable)" -eq 1 ]
+	then
 		urlProto="https"
 	else
 		urlProto="http"
 	fi
-	if [ -n "$(nvram get lan_domain)" ]; then
+	if [ -n "$(nvram get lan_domain)" ]
+	then
 		urlDomain="$(nvram get lan_hostname).$(nvram get lan_domain)"
 	else
 		urlDomain="$(nvram get lan_ipaddr)"
@@ -985,6 +987,7 @@ Mount_WebUI()
 {
 	Print_Output true "Mounting WebUI tab for $SCRIPT_NAME" "$PASS"
 
+	local guiMountedOK=false
 	LOCKFILE=/tmp/addonwebui.lock
 	FD=386
 	eval exec "$FD>$LOCKFILE"
@@ -993,24 +996,28 @@ Mount_WebUI()
 	if [ "$MyWebPage" = "NONE" ]
 	then
 		Print_Output true "**ERROR** Unable to mount $SCRIPT_NAME WebUI page." "$CRIT"
+		flock -u "$FD"
 		Clear_Lock
-		exit 1
+		return 1
 	fi
 	cp -fp "$SCRIPT_DIR/uidivstats_www.asp" "$SCRIPT_WEBPAGE_DIR/$MyWebPage"
 	echo "$SCRIPT_NAME" > "$SCRIPT_WEBPAGE_DIR/$(echo "$MyWebPage" | cut -f1 -d'.').title"
 
 	if [ "$(uname -o)" = "ASUSWRT-Merlin" ]
 	then
-		if [ ! -f "$TEMP_MENU_TREE" ]; then
+		if [ ! -s "$TEMP_MENU_TREE" ]; then
 			cp -fp /www/require/modules/menuTree.js "$TEMP_MENU_TREE"
 		fi
 		sed -i "\\~$MyWebPage~d" "$TEMP_MENU_TREE"
 
-		if /bin/grep 'tabName: \"Diversion\"},' "$TEMP_MENU_TREE" >/dev/null 2>&1
+		if grep -q '{url: .*, tabName: \"Diversion\"},' "$TEMP_MENU_TREE"
 		then
-			sed -i "/tabName: \"Diversion\"/a {url: \"$MyWebPage\", tabName: \"$SCRIPT_NAME\"}," "$TEMP_MENU_TREE"
-		else
+			sed -i -n "/{url: .*, tabName: \"Diversion\"},/{ s//&\n{url: \"$MyWebPage\", tabName: \"$SCRIPT_NAME\"},/; p; :a; n; p; ba; }; p}" "$TEMP_MENU_TREE"
+			guiMountedOK=true
+		elif grep -q 'url: \"Advanced_SwitchCtrl_Content.asp\", tabName:' "$TEMP_MENU_TREE"
+		then
 			sed -i "/url: \"Advanced_SwitchCtrl_Content.asp\", tabName:/a {url: \"$MyWebPage\", tabName: \"$SCRIPT_NAME\"}," "$TEMP_MENU_TREE"
+			guiMountedOK=true
 		fi
 
 		umount /www/require/modules/menuTree.js 2>/dev/null
@@ -1018,7 +1025,12 @@ Mount_WebUI()
 	fi
 	flock -u "$FD"
 
-	Print_Output true "Mounted $SCRIPT_NAME WebUI page as $MyWebPage" "$PASS"
+	if "$guiMountedOK"
+	then
+		Print_Output true "Mounted $SCRIPT_NAME WebUI page as $MyWebPage" "$PASS"
+	else
+		Print_Output true "**ERROR** Unable to mount $SCRIPT_NAME WebUI page." "$CRIT"
+	fi
 }
 
 ##-------------------------------------##
@@ -1027,7 +1039,8 @@ Mount_WebUI()
 _CheckFor_WebGUI_Page_()
 {
    if [ "$(_Check_WebGUI_Page_Exists_)" = "NONE" ]
-   then Mount_WebUI ; fi
+   then Mount_WebUI
+   fi
 }
 
 ##-------------------------------------##
@@ -1178,8 +1191,9 @@ DaysToKeep()
 			while true
 			do
 				ScriptHeader
-				printf "${BOLD}Current number of days to keep data: ${GRNct}${daysToKeep}${CLRct}\n\n"
-				printf "${BOLD}Please enter the maximum number of days\nto keep the data for [${MINvalue}-${MAXvalue}] (e=Exit):${CLEARFORMAT}  "
+				printf " ${BOLD}Current number of days to keep data: ${GRNct}${daysToKeep}${CLRct}\n\n"
+				printf " ${BOLD}Please enter the maximum number of days\n"
+				printf " to keep the data for [${GRNct}${MINvalue}-${MAXvalue}${CLRct}] (e=Exit):${CLRct}  "
 				read -r daystokeep_choice
 				if [ -z "$daystokeep_choice" ] && \
 				   echo "$daysToKeep" | grep -qE "^([1-9][0-9]{1,2})$" && \
@@ -1193,11 +1207,11 @@ DaysToKeep()
 					break
 				elif ! Validate_Number "$daystokeep_choice"
 				then
-					printf "\n${ERR}Please enter a valid number [${MINvalue}-${MAXvalue}].${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a valid number [${MINvalue}-${MAXvalue}].${CLRct}\n"
 					PressEnter
 				elif [ "$daystokeep_choice" -lt "$MINvalue" ] || [ "$daystokeep_choice" -gt "$MAXvalue" ]
 				then
-					printf "\n${ERR}Please enter a number between ${MINvalue} and ${MAXvalue}.${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a number between ${MINvalue} and ${MAXvalue}.${CLRct}\n"
 					PressEnter
 				else
 					daysToKeep="$daystokeep_choice"
@@ -1234,8 +1248,9 @@ LastXQueries()
 			while true
 			do
 				ScriptHeader
-				printf "${BOLD}Current number of queries to display: ${GRNct}${lastXQueries}${CLRct}\n\n"
-				printf "${BOLD}Please enter the maximum number of queries\nto display in the WebUI [${MINvalue}-${MAXvalue}] (e=Exit):${CLEARFORMAT}  "
+				printf " ${BOLD}Current number of queries to display: ${GRNct}${lastXQueries}${CLRct}\n\n"
+				printf " ${BOLD}Please enter the maximum number of queries\n"
+				printf " to display in the WebUI [${GRNct}${MINvalue}-${MAXvalue}${CLRct}] (e=Exit):${CLRct}  "
 				read -r lastx_choice
 				if [ -z "$lastx_choice" ] && \
 				   echo "$lastXQueries" | grep -qE "^([1-9][0-9]{1,4})$" && \
@@ -1249,11 +1264,11 @@ LastXQueries()
 					break
 				elif ! Validate_Number "$lastx_choice"
 				then
-					printf "\n${ERR}Please enter a valid number [${MINvalue}-${MAXvalue}].${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a valid number [${MINvalue}-${MAXvalue}].${CLRct}\n"
 					PressEnter
 				elif [ "$lastx_choice" -lt "$MINvalue" ] || [ "$lastx_choice" -gt "$MAXvalue" ]
 				then
-					printf "\n${ERR}Please enter a number between ${MINvalue} and ${MAXvalue}.${CLEARFORMAT}\n"
+					printf "\n${ERR}Please enter a number between ${MINvalue} and ${MAXvalue}.${CLRct}\n"
 					PressEnter
 				else
 					lastXQueries="$lastx_choice"
@@ -1575,8 +1590,8 @@ _TrimDatabaseTime_()
            while true
            do
                ScriptHeader
-               printf "${BOLD}Current schedule: ${GRNct}Daily at ${trimDBtimeHRx}${CLRct}\n"
-               printf "\n${BOLD}Enter schedule HOUR [0-23] (e=Exit):${CLEARFORMAT}  "
+               printf " ${BOLD}Current schedule: ${GRNct}Daily at ${trimDBtimeHRx}${CLRct}\n"
+               printf "\n ${BOLD}Enter schedule HOUR [${GRNct}0-23${CLRct}] (e=Exit):${CLRct}  "
                read -r newTrimDBhour
                if [ -z "$newTrimDBhour" ] && _ValidateCronJobHour_ "$trimDBhour"
                then
@@ -1588,7 +1603,7 @@ _TrimDatabaseTime_()
                    break
                elif ! _ValidateCronJobHour_ "$newTrimDBhour"
                then
-                   printf "\n${ERR}Please enter a valid hour [0-23].${CLEARFORMAT}\n"
+                   printf "\n${ERR}Please enter a valid hour [0-23].${CLRct}\n"
                    PressEnter
                    continue
                else
@@ -2845,12 +2860,12 @@ ScriptHeader()
 MainMenu()
 {
 	local statusBackProcsState
-    local cacheModeStr  menuOption  tmpInfoStr  memInfoStr
+    local cacheModeStr  queryModeStr  menuOption  tmpInfoStr  memInfoStr
 
 	_InvalidMenuOptionMsg_()
 	{
        [ -n "$1" ] && \
-       printf "\n${REDct}INVALID input [$1]${CLEARFORMAT}"
+       printf "\n${REDct}INVALID input [$1]${CLRct}"
 	   printf "\nPlease choose a valid option.\n\n"
 	}
 
@@ -2866,47 +2881,50 @@ MainMenu()
 	else cacheModeStr="TMPFS"
 	fi
 
-	printf "WebUI for %s is available at:\n${SETTING}%s${CLEARFORMAT}\n\n" "$SCRIPT_NAME" "$(Get_WebUI_URL)"
+	queryModeStr="$(QueryMode check)"
+	[ "$queryModeStr" = "all" ] && queryModeStr="ALL"
 
-	printf "1.    Update Diversion Statistics (daily only)\n"
-	printf "      Database size: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_GetFileSize_ "$DNS_DB" HRx)"
-	printf "2.    Update Diversion Statistics (daily, weekly and monthly)\n"
+	printf " WebUI for %s is available at:\n" "$SCRIPT_NAME"
+	printf " ${SETTING}%s${CLRct}\n\n" "$(Get_WebUI_URL)"
+
+	printf "   ${GRNct}1${CLRct}. Update Diversion Statistics (daily only)\n"
+	printf "      Database size: ${SETTING}%s${CLRct}\n\n" "$(_GetFileSize_ "$DNS_DB" HRx)"
+	printf "   ${GRNct}2${CLRct}. Update Diversion Statistics (daily, weekly and monthly)\n"
 	printf "      WARNING: THIS MAY TAKE A WHILE (>5 minutes)\n\n"
-	printf "3.    Edit list of domains to exclude from %s statistics\n\n" "$SCRIPT_NAME"
-	printf "4.    Set number of recent DNS queries to show in WebUI\n"
-	printf "      Currently: ${SETTING}%s queries will be shown${CLEARFORMAT}\n\n" "$(LastXQueries check)"
-	printf "5.    Set number of days data to keep in database\n"
-	printf "      Currently: ${SETTING}%s days data will be kept${CLEARFORMAT}\n\n" "$(DaysToKeep check)"
-	printf "6.    Set the hour for daily cron job to trim the database\n"
-	printf "      Currently: ${SETTING}%s${CLEARFORMAT}\n\n" "$(_TrimDatabaseTime_ timeHRx)"
-	printf "p.    Toggle background processing of Diversion statistics\n"
-	printf "      Currently: ${statusBackProcsState}${CLEARFORMAT}\n\n"
-	printf "q.    Toggle query mode\n"
-	printf "      Currently: ${SETTING}%s${CLEARFORMAT} query types will be logged\n\n" "$(QueryMode check)"
-	printf "c.    Toggle cache mode\n"
-	printf "      Currently: ${SETTING}%s${CLEARFORMAT} being used to cache query records\n" "$cacheModeStr"
+	printf "   ${GRNct}3${CLRct}. Edit list of domains to exclude from %s statistics\n\n" "$SCRIPT_NAME"
+	printf "   ${GRNct}4${CLRct}. Set number of recent DNS queries to show in WebUI\n"
+	printf "      Currently: ${SETTING}%s queries will be shown${CLRct}\n\n" "$(LastXQueries check)"
+	printf "   ${GRNct}5${CLRct}. Set number of days data to keep in database\n"
+	printf "      Currently: ${SETTING}%s days data will be kept${CLRct}\n\n" "$(DaysToKeep check)"
+	printf "   ${GRNct}6${CLRct}. Set the hour for daily cron job to trim the database\n"
+	printf "      Currently: ${SETTING}%s${CLRct}\n\n" "$(_TrimDatabaseTime_ timeHRx)"
+	printf "   ${GRNct}p${CLRct}. Toggle background processing of Diversion statistics\n"
+	printf "      Currently: ${statusBackProcsState}${CLRct}\n\n"
+	printf "   ${GRNct}q${CLRct}. Toggle query mode\n"
+	printf "      Currently: ${SETTING}%s${CLRct} query types will be logged\n\n" "$queryModeStr"
+	printf "   ${GRNct}c${CLRct}. Toggle cache mode\n"
+	printf "      Currently: ${SETTING}%s${CLRct} being used to cache query records\n" "$cacheModeStr"
 	if [ "$cacheModeStr" = "NONE" ]
 	then printf "\n"
 	else
         tmpInfoStr="$(_Get_TMPFS_Space_ FREE HR)" ; memInfoStr="$(_GetAvailableRAM_ HRx)"
-        printf "      TMPFS Reported: ${SETTING}%s${CLEARFORMAT}   RAM Available: ${SETTING}%s${CLEARFORMAT}\n\n" "$tmpInfoStr" "$memInfoStr"
+        printf "      TMPFS Reported: ${SETTING}%s${CLRct}   RAM Available: ${SETTING}%s${CLRct}\n\n" "$tmpInfoStr" "$memInfoStr"
 	fi
-	printf "u.    Check for updates\n"
-	printf "uf.   Update %s with latest version (force update)\n\n" "$SCRIPT_NAME"
-	printf "r.    Reset %s database / delete all data\n\n" "$SCRIPT_NAME"
-	printf "e.    Exit %s\n\n" "$SCRIPT_NAME"
-	printf "z.    Uninstall %s\n" "$SCRIPT_NAME"
-	printf "\n"
-	printf "${BOLD}###################################################################${CLEARFORMAT}\n"
-	printf "\n"
+	printf "   ${GRNct}u${CLRct}. Check for updates\n"
+	printf "  ${GRNct}uf${CLRct}. Update %s with latest version (force update)\n\n" "$SCRIPT_NAME"
+	printf "   ${GRNct}r${CLRct}. Reset %s database / delete all data\n\n" "$SCRIPT_NAME"
+	printf "   ${GRNct}e${CLRct}. Exit %s\n\n" "$SCRIPT_NAME"
+	printf "   ${GRNct}z${CLRct}. Uninstall %s\n" "$SCRIPT_NAME"
+	printf "\n${BOLD}################################################################${CLRct}\n\n"
 
 	while true
 	do
-		printf "Choose an option:  " ; read -r menuOption
+		printf " Choose an option:  " ; read -r menuOption
 		case "$menuOption" in
 			1)
 				printf "\n"
-				if Check_Lock menu; then
+				if Check_Lock menu
+				then
 					Menu_GenerateStats
 				fi
 				PressEnter
@@ -2914,7 +2932,8 @@ MainMenu()
 			;;
 			2)
 				printf "\n"
-				if Check_Lock menu; then
+				if Check_Lock menu
+				then
 					Menu_GenerateStats fullrefresh
 				fi
 				PressEnter
@@ -2922,11 +2941,10 @@ MainMenu()
 			;;
 			3)
 				printf "\n"
-				if Check_Lock menu; then
-					Menu_EditExcludeList
+				if Check_Lock menu
+				then
+					Menu_EditExcludeList && PressEnter
 				fi
-				printf "\n"
-				PressEnter
 				break
 			;;
 			4)
@@ -3007,7 +3025,8 @@ MainMenu()
 			;;
 			r)
 				printf "\n"
-				if Check_Lock menu; then
+				if Check_Lock menu
+				then
 					Menu_ResetDB
 					Clear_Lock
 				fi
@@ -3016,13 +3035,13 @@ MainMenu()
 			;;
 			e)
 				ScriptHeader
-				printf "\\n${BOLD}Thanks for using %s!${CLEARFORMAT}\\n\\n\\n" "$SCRIPT_NAME"
+				printf "\n${BOLD}Thanks for using %s!${CLRct}\n\n\n" "$SCRIPT_NAME"
 				exit 0
 			;;
 			z)
 				while true
 				do
-					printf "\\n${BOLD}Are you sure you want to uninstall %s? (y/n)${CLEARFORMAT}  " "$SCRIPT_NAME"
+					printf "\n${BOLD}Are you sure you want to uninstall %s? (y/n)${CLRct}  " "$SCRIPT_NAME"
 					read -r confirm
 					case "$confirm" in
 						y|Y)
@@ -3263,89 +3282,97 @@ Menu_GenerateStats()
 	Clear_Lock
 }
 
+##----------------------------------------##
+## Modified by Martinski W. [2026-Apr-23] ##
+##----------------------------------------##
 Menu_EditExcludeList()
 {
-	ScriptHeader
-	texteditor=""
-	exitmenu="false"
-
-	printf "${BOLD}${WARN}Enter one domain per line${CLEARFORMAT}\\n" "$SCRIPT_NAME"
-	printf "\\nThis file is located here: %s\\n" "$STATSEXCLUDE_LIST_FILE"
-	printf "\\n\\n${BOLD}A choice of text editors is available:${CLEARFORMAT}\\n"
-	printf "1.    nano (recommended for beginners)\\n"
-	printf "2.    vi\\n"
-	printf "\\ne.    Exit to main menu\\n"
+	local textEditor=""  exitMenu=false  retCode=1
 
 	while true
 	do
-		printf "\\n${BOLD}Choose an option:${CLEARFORMAT}  "
-		read -r editor
-		case "$editor" in
+		ScriptHeader
+		printf " ${BOLD}${WARN}Enter one domain per line.${CLRct}\n\n"
+		printf " The file is located here: ${GRNct}%s${CLRct}\n" "$STATSEXCLUDE_LIST_FILE"
+		printf "\n\n ${BOLD}Please select a text editor:${CLRct}\n\n"
+		printf "  ${GRNct}1${CLRct}. nano (recommended for beginners)\n"
+		printf "  ${GRNct}2${CLRct}. vi\n\n"
+		printf "  ${GRNct}e${CLRct}. Exit to main menu\n\n"
+		printf " ${BOLD}Choose an option:${CLRct}  "
+		read -r editorChoice
+
+		case "$editorChoice" in
 			1)
-				texteditor="nano -K"
+				textEditor="nano -K"
 				break
-			;;
+				;;
 			2)
-				texteditor="vi"
+				textEditor="vi"
 				break
-			;;
+				;;
 			e)
-				exitmenu="true"
+				exitMenu=true
 				break
-			;;
+				;;
 			*)
-				printf "\\nPlease choose a valid option\\n\\n"
-			;;
+				printf "\n ${ERR}Please choose a valid option [1-2]${CLRct}\n\n"
+				PressEnter
+				;;
 		esac
 	done
 
-	if [ "$exitmenu" != "true" ]
+	if [ "$exitMenu" != "true" ]
 	then
 		oldmd5="$(md5sum "$STATSEXCLUDE_LIST_FILE" | awk '{print $1}')"
-		$texteditor "$STATSEXCLUDE_LIST_FILE"
+		$textEditor "$STATSEXCLUDE_LIST_FILE"
 		newmd5="$(md5sum "$STATSEXCLUDE_LIST_FILE" | awk '{print $1}')"
 		if [ "$oldmd5" != "$newmd5" ]
 		then
-			ScriptHeader
-			printf "\\n${BOLD}${WARN}Changes detected, would you like to regenerate stats?${CLEARFORMAT}\\n\\n"
-			printf "1.    Daily stats only\\n"
-			printf "2.    Daily, weekly and monthly (may take a while, >5 mins)\\n"
-			printf "\\ne.    Exit to main menu\\n"
-
+			retCode=0
 			while true
 			do
-				printf "\\n${BOLD}Choose an option:${CLEARFORMAT}  "
-				read -r editor
-				case "$editor" in
+				ScriptHeader
+				printf " ${BOLD}${WARN}Changes detected, would you like to regenerate stats?${CLRct}\n\n"
+				printf "  ${GRNct}1${CLRct}. Daily stats only\n"
+				printf "  ${GRNct}2${CLRct}. Daily, weekly and monthly (may take a while, >5 mins)\n\n"
+				printf "  ${GRNct}e${CLRct}. Exit to main menu\n\n"
+				printf " ${BOLD}Choose an option:${CLRct}  "
+				read -r menuOption
+
+				case "$menuOption" in
 					1)
-						printf "\\n"
+						printf "\n"
 						Menu_GenerateStats
 						break
-					;;
+						;;
 					2)
-						printf "\\n"
+						printf "\n"
 						Menu_GenerateStats fullrefresh
 						break
-					;;
+						;;
 					e)
 						break
-					;;
+						;;
 					*)
-						printf "\\nPlease choose a valid option\\n\\n"
-					;;
+						printf "\n ${ERR}Please choose a valid option [1-2]${CLRct}\n\n"
+						PressEnter
+						;;
 				esac
 			done
+			echo
 		fi
 	fi
+
 	Clear_Lock
+	return "$retCode"
 }
 
 Menu_ResetDB()
 {
-	printf "${REDct}*WARNING*${CLEARFORMAT}${BOLD}${WARN}\n"
+	printf "${REDct}*WARNING*${CLRct}${BOLD}${WARN}\n"
     printf "This will reset the %s database by deleting all database records.\n" "$SCRIPT_NAME"
-	printf "A backup of the database file will be created if you change your mind.${CLEARFORMAT}\n"
-	printf "\n${BOLD}Do you want to continue? (y/n)${CLEARFORMAT}  "
+	printf "A backup of the database file will be created if you change your mind.${CLRct}\n"
+	printf "\n${BOLD}Do you want to continue? (y/n)${CLRct}  "
 	read -r confirm
 	case "$confirm" in
 		y|Y)
@@ -3353,7 +3380,7 @@ Menu_ResetDB()
 			Reset_DB ".bak"
 		;;
 		*)
-			printf "\n${BOLD}${WARN}Database reset cancelled${CLEARFORMAT}\n\n"
+			printf "\n${BOLD}${WARN}Database reset cancelled${CLRct}\n\n"
 		;;
 	esac
 }
@@ -3410,7 +3437,7 @@ Menu_Uninstall()
 	fi
 	flock -u "$FD"
 	rm -f "$SCRIPT_DIR/uidivstats_www.asp" 2>/dev/null
-	rm -rf "$SCRIPT_WEB_DIR" 2>/dev/null
+	rm -fr "$SCRIPT_WEB_DIR" 2>/dev/null
 
 	SETTINGSFILE="/jffs/addons/custom_settings.txt"
 	sed -i '/uidivstats_version_local/d' "$SETTINGSFILE"
@@ -3419,11 +3446,11 @@ Menu_Uninstall()
 	/opt/etc/init.d/S90taildns stop >/dev/null 2>&1
 	sleep 3
 	rm -f /opt/etc/init.d/S90taildns 2>/dev/null
-	rm -rf "$SCRIPT_DIR/taildns.d" 2>/dev/null
+	rm -fr "$SCRIPT_DIR/taildns.d" 2>/dev/null
 	rm -f "$SCRIPT_DIR/taildns.tar.gz.md5" 2>/dev/null
 	rm -f /tmp/cache-uiDivStats-SQL.tmp*
 
-	printf "\\n\\e[1mDo you want to delete %s stats and config? (y/n)\\e[0m  " "$SCRIPT_NAME"
+	printf "\n${BOLD}Do you want to delete %s stats and config? (y/n)${CLRct}  " "$SCRIPT_NAME"
 	read -r confirm
 	case "$confirm" in
 		y|Y)
